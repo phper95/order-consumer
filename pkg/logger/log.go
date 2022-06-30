@@ -1,134 +1,102 @@
 package logger
 
 import (
-	rotatelogs "github.com/lestrrat/go-file-rotatelogs"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"io"
+	"fmt"
+	"gitee.com/phper95/pkg/file"
+	"log"
 	"order-consumer/global"
+	"os"
+	"path/filepath"
+	"runtime"
 	"time"
 )
 
-//@author: [phper95](https://github.com/phper95)
+type Level int
 
-func SetupLogger() *zap.SugaredLogger {
-	filepath := global.CONFIG.Zap.LogFilePath
-	infofilename := global.CONFIG.Zap.LogInfoFileName
-	warnfilename := global.CONFIG.Zap.LogWarnFileName
-	fileext := global.CONFIG.Zap.LogFileExt
+var (
+	F *os.File
 
-	Logger, _ := getInitLogger(filepath, infofilename, warnfilename, fileext)
+	DefaultPrefix      = ""
+	DefaultCallerDepth = 2
 
-	defer Logger.Sync()
+	logger     *log.Logger
+	logPrefix  = ""
+	levelFlags = []string{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}
+)
 
-	return Logger
+const (
+	DEBUG Level = iota
+	INFO
+	WARNING
+	ERROR
+	FATAL
+)
 
+// Setup initialize the log instance
+func Init() {
+	var err error
+	filePath := getLogFilePath()
+	fileName := getLogFileName()
+	F, err = file.MustOpen(fileName, filePath)
+	if err != nil {
+		log.Fatalf("logging.Setup err: %v", err)
+	}
+
+	logger = log.New(F, DefaultPrefix, log.LstdFlags)
 }
 
-//get logger
-func getInitLogger(filepath, infofilename, warnfilename, fileext string) (*zap.SugaredLogger, error) {
-	encoder := getEncoder()
-	//两个判断日志等级的interface
-	//warnlevel以下属于info
-	infoLevel := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl < zapcore.WarnLevel
-	})
-	//warnlevel及以上属于warn
-	warnLevel := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl >= zapcore.WarnLevel
-	})
+// Debug output logs at debug level
+func Debug(v ...interface{}) {
+	setPrefix(DEBUG)
+	logger.Println(v)
+}
 
-	infoWriter, err := getLogWriter(filepath+"/"+infofilename, fileext)
-	if err != nil {
-		return nil, err
-	}
-	warnWriter, err2 := getLogWriter(filepath+"/"+warnfilename, fileext)
-	if err2 != nil {
-		return nil, err2
+// Info output logs at info level
+func Info(v ...interface{}) {
+	setPrefix(INFO)
+	logger.Println(v)
+}
+
+// Warn output logs at warn level
+func Warn(v ...interface{}) {
+	setPrefix(WARNING)
+	logger.Println(v)
+}
+
+// Error output logs at error level
+func Error(v ...interface{}) {
+	setPrefix(ERROR)
+	logger.Println(v)
+}
+
+// Fatal output logs at fatal level
+func Fatal(v ...interface{}) {
+	setPrefix(FATAL)
+	logger.Fatalln(v)
+}
+
+// setPrefix set the prefix of the log output
+func setPrefix(level Level) {
+	_, file, line, ok := runtime.Caller(DefaultCallerDepth)
+	if ok {
+		logPrefix = fmt.Sprintf("[%s][%s:%d]", levelFlags[level], filepath.Base(file), line)
+	} else {
+		logPrefix = fmt.Sprintf("[%s]", levelFlags[level])
 	}
 
-	//创建具体的Logger
-	core := zapcore.NewTee(
-		zapcore.NewCore(encoder, infoWriter, infoLevel),
-		zapcore.NewCore(encoder, warnWriter, warnLevel),
+	logger.SetPrefix(logPrefix)
+}
+
+// getLogFilePath get the log file save path
+func getLogFilePath() string {
+	return fmt.Sprintf("%s%s", global.CONFIG.App.RuntimeRootPath, global.CONFIG.App.LogSavePath)
+}
+
+// getLogFileName get the save name of the log file
+func getLogFileName() string {
+	return fmt.Sprintf("%s%s.%s",
+		global.CONFIG.App.LogSaveName,
+		time.Now().Format(global.CONFIG.App.TimeFormat),
+		global.CONFIG.App.LogFileExt,
 	)
-	loggerres := zap.New(core, zap.AddCaller())
-
-	return loggerres.Sugar(), nil
-}
-
-//get logger
-func GetInitAccessLogger(filepath, filename, fileext string) (*zap.SugaredLogger, error) {
-
-	warnWriter, err2 := getLogWriter(filepath+"/"+filename, fileext)
-	if err2 != nil {
-		return nil, err2
-	}
-
-	var cfg zap.Config
-	cfg = zap.Config{
-		Level:       zap.NewAtomicLevelAt(zap.DebugLevel),
-		Development: true,
-		Encoding:    "console",
-		EncoderConfig: zapcore.EncoderConfig{
-			MessageKey: "msg",
-		},
-		OutputPaths:      []string{"stdout", "./log.txt"},
-		ErrorOutputPaths: []string{"stderr"},
-	}
-
-	l, err := cfg.Build(SetOutput(warnWriter, cfg))
-	if err != nil {
-		panic(err)
-	}
-
-	return l.Sugar(), nil
-}
-
-func SetOutput(ws zapcore.WriteSyncer, conf zap.Config) zap.Option {
-	var enc zapcore.Encoder
-	switch conf.Encoding {
-	case "json":
-		enc = zapcore.NewJSONEncoder(conf.EncoderConfig)
-	case "console":
-		enc = zapcore.NewConsoleEncoder(conf.EncoderConfig)
-	default:
-		panic("unknown encoding")
-	}
-	return zap.WrapCore(func(core zapcore.Core) zapcore.Core {
-		return zapcore.NewCore(enc, ws, conf.Level)
-	})
-}
-
-//Encoder
-func getEncoder() zapcore.Encoder {
-	encoderConfig := zap.NewProductionEncoderConfig()
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
-	return zapcore.NewConsoleEncoder(encoderConfig)
-}
-
-//LogWriter
-func getLogWriter(filePath, fileext string) (zapcore.WriteSyncer, error) {
-	warnIoWriter, err := getWriter(filePath, fileext)
-	if err != nil {
-		return nil, err
-	}
-	return zapcore.AddSync(warnIoWriter), nil
-}
-
-//日志文件切割，按天
-func getWriter(filename, fileext string) (io.Writer, error) {
-	// 保存30天内的日志，每24小时(整点)分割一次日志
-	hook, err := rotatelogs.New(
-		filename+"_%Y%m%d."+fileext,
-		rotatelogs.WithLinkName(filename),
-		rotatelogs.WithMaxAge(time.Hour*24*30),
-		rotatelogs.WithRotationTime(time.Hour*24),
-	)
-	if err != nil {
-		//panic(err)
-		return nil, err
-	}
-	return hook, nil
 }

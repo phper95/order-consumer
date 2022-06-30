@@ -1,5 +1,6 @@
 app:
   domain: localhost
+  run_mode: dev
   time-format: 20060102
 
 database:
@@ -15,8 +16,13 @@ redis:
   password:
   idle_timeout: 200
 
+elasticsearch:
+  hosts: ["http://127.0.0.1:9200"]
+  password:
+
 kafka:
   hosts: ["127.0.0.1:9091"]
+  order-topic: "shop-order"
 
 zap:
   log-filepath: 'runtime/logs'

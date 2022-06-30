@@ -3,15 +3,17 @@ package conf
 import "time"
 
 type Config struct {
-	App      App      `mapstructure:"app" yaml:"app"`
-	Database Database `mapstructure:"database" yaml:"database"`
-	Redis    Redis    `mapstructure:"redis" yaml:"redis"`
-	Kafka    Kafka    `mapstructure:"kafka" yaml:"kafka"`
-	Zap      Zap      `mapstructure:"zap" yaml:"zap"`
+	App           App           `mapstructure:"app" yaml:"app"`
+	Database      Database      `mapstructure:"database" yaml:"database"`
+	Redis         Redis         `mapstructure:"redis" yaml:"redis"`
+	Elasticsearch Elasticsearch `mapstructure:"elasticsearch" yaml:"elasticsearch"`
+	Kafka         Kafka         `mapstructure:"kafka" yaml:"kafka"`
+	Zap           Zap           `mapstructure:"zap" yaml:"zap"`
 }
 
 type App struct {
 	Domain          string `mapstructure:"domain" yaml:"domain"`
+	RunMode         string `mapstructure:"run_mode"  yaml:"run_mode"`
 	RuntimeRootPath string `mapstructure:"runtime-root-path" yaml:"runtime-root-path"`
 	LogSavePath     string `mapstructure:"log-save-path" yaml:"log-save-path"`
 	LogSaveName     string `mapstructure:"log-save-name" yaml:"log-save-name"`
@@ -34,6 +36,12 @@ type Redis struct {
 	IdleTimeout time.Duration `mapstructure:"idle-timeout" yaml:"idle-timeout"`
 }
 
+type Elasticsearch struct {
+	Hosts    []string `mapstructure:"hosts" yaml:"hosts"`
+	Username string   `mapstructure:"username" yaml:"username"`
+	Password string   `mapstructure:"password" yaml:"password"`
+}
+
 type Zap struct {
 	LogFilePath     string `mapstructure:"log-filepath" yaml:"log-filepath"`
 	LogInfoFileName string `mapstructure:"log-info-filename" yaml:"log-info-filename"`
@@ -42,5 +50,6 @@ type Zap struct {
 }
 
 type Kafka struct {
-	Hosts []string `mapstructure:"hosts" yaml:"hosts"`
+	Hosts      []string `mapstructure:"hosts" yaml:"hosts"`
+	OrderTopic string   `mapstructure:"order-topic" yaml:"order-topic"`
 }
