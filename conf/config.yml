@@ -18,7 +18,8 @@ redis:
 
 elasticsearch:
   hosts: ["http://127.0.0.1:9200"]
-  password:
+  username: "elastic"
+  password: "w4s*bHiPlK-wglVZuoX8"
 
 kafka:
   hosts: ["127.0.0.1:9091"]
